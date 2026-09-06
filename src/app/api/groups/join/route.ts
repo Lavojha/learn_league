@@ -20,7 +20,18 @@ export async function POST(request: Request) {
     const [existing] = await db.select().from(groupMembers).where(and(eq(groupMembers.groupId, group.id), eq(groupMembers.userId, user.id))).limit(1);
     if (existing?.status === "active") return Response.json({ success: true, status: "already_member" });
 
-    if (body.inviteCode || group.type === "public") {
+    if (body.inviteCode) {
+      if (!group.inviteCode) return Response.json({ error: "This group does not have an invite code" }, { status: 403 });
+      if (existing?.status === "removed") {
+        await db.update(groupMembers).set({ status: "active", role: "member", joinedAt: new Date(), updatedAt: new Date() }).where(eq(groupMembers.id, existing.id));
+        return Response.json({ success: true, status: "joined" });
+      }
+      const [member] = await db.insert(groupMembers).values({ groupId: group.id, userId: user.id, role: "member" }).onConflictDoNothing().returning();
+      return Response.json({ success: true, status: member ? "joined" : "already_member" });
+    }
+
+    if (group.type === "public") {
+      if (group.visibility !== "discoverable") return Response.json({ error: "Public groups must be discoverable" }, { status: 403 });
       if (existing?.status === "removed") {
         await db.update(groupMembers).set({ status: "active", role: "member", joinedAt: new Date(), updatedAt: new Date() }).where(eq(groupMembers.id, existing.id));
         return Response.json({ success: true, status: "joined" });
