@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { groups } from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
@@ -14,20 +14,25 @@ export async function GET(_: Request, { params }: { params: Promise<{ groupId: s
   const user = await requireUser();
   const { groupId } = await params;
   if (!(await hasGroupPermission(user.id, groupId, "manageInvitations"))) return Response.json({ error: "Permission denied" }, { status: 403 });
-  const [group] = await db.select({ inviteCode: groups.inviteCode }).from(groups).where(eq(groups.id, groupId)).limit(1);
-  return group ? Response.json({ inviteCode: group.inviteCode }) : Response.json({ error: "Group not found" }, { status: 404 });
+  const [group] = await db.select({ inviteCode: groups.inviteCode, type: groups.type, status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
+  if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
+  return Response.json({ inviteCode: group.type === "private" ? group.inviteCode : null });
 }
 
 export async function POST(_: Request, { params }: { params: Promise<{ groupId: string }> }) {
   const user = await requireUser();
   const { groupId } = await params;
   if (!(await hasGroupPermission(user.id, groupId, "manageInvitations"))) return Response.json({ error: "Permission denied" }, { status: 403 });
+  const [current] = await db.select({ type: groups.type, status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
+  if (!current || current.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
+  if (current.type !== "private") return Response.json({ error: "Invite codes are only used for private groups" }, { status: 400 });
+
   let code = normalizeInviteCode(generateInviteCode());
   for (let attempt = 0; attempt < 5; attempt++) {
     const [existing] = await db.select({ id: groups.id }).from(groups).where(eq(groups.inviteCode, code)).limit(1);
     if (!existing) break;
     code = normalizeInviteCode(generateInviteCode());
   }
-  const [group] = await db.update(groups).set({ inviteCode: code, updatedAt: new Date() }).where(eq(groups.id, groupId)).returning({ inviteCode: groups.inviteCode });
+  const [group] = await db.update(groups).set({ inviteCode: code, updatedAt: new Date() }).where(and(eq(groups.id, groupId), eq(groups.status, "active"))).returning({ inviteCode: groups.inviteCode });
   return group ? Response.json({ success: true, inviteCode: group.inviteCode }) : Response.json({ error: "Group not found" }, { status: 404 });
 }
