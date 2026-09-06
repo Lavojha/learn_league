@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { groupMembers, groupPermissions, groups } from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
@@ -9,11 +9,11 @@ import { createId } from "@/lib/utils/ids";
 export async function GET() {
   try {
     const user = await requireUser();
-    const memberships = await db.select().from(groupMembers).where(eq(groupMembers.userId, user.id));
-    const ids = memberships.filter((m) => m.status === "active").map((m) => m.groupId);
+    const memberships = await db.select({ groupId: groupMembers.groupId }).from(groupMembers).where(eq(groupMembers.userId, user.id));
+    const ids = memberships.map((m) => m.groupId);
     if (ids.length === 0) return Response.json({ groups: [] });
-    const rows = await db.select().from(groups);
-    return Response.json({ groups: rows.filter((group) => ids.includes(group.id)) });
+    const rows = await db.select().from(groups).where(inArray(groups.id, ids));
+    return Response.json({ groups: rows.filter((group) => group.status === "active") });
   } catch (error) {
     console.error(error);
     return Response.json({ error: "Unable to load groups" }, { status: 500 });
