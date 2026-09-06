@@ -1,14 +1,17 @@
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { groupInvitations, groupMembers, groups } from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { hasGroupPermission } from "@/lib/groups/permissions";
 import { respondInvitationSchema, userIdSchema } from "@/lib/validation/groups";
 
+const groupIdSchema = z.string().uuid();
+
 export async function POST(request: Request, { params }: { params: Promise<{ groupId: string }> }) {
   try {
     const user = await requireUser();
-    const { groupId } = await params;
+    const groupId = groupIdSchema.parse((await params).groupId);
     const body = await request.json();
 
     if (body.action) {
@@ -64,8 +67,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ gro
 }
 
 export async function GET(_: Request, { params }: { params: Promise<{ groupId: string }> }) {
-  const user = await requireUser();
-  const { groupId } = await params;
-  const invitations = await db.select().from(groupInvitations).where(and(eq(groupInvitations.groupId, groupId), eq(groupInvitations.invitedUserId, user.id), eq(groupInvitations.status, "pending")));
-  return Response.json({ invitations });
+  try {
+    const user = await requireUser();
+    const groupId = groupIdSchema.parse((await params).groupId);
+    const invitations = await db.select().from(groupInvitations).where(and(eq(groupInvitations.groupId, groupId), eq(groupInvitations.invitedUserId, user.id), eq(groupInvitations.status, "pending")));
+    return Response.json({ invitations });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load invitations" }, { status: 400 });
+  }
 }
