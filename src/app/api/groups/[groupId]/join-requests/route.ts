@@ -23,7 +23,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ gr
     if (!joinRequest) return Response.json({ error: "Request not found" }, { status: 404 });
 
     if (body.action === "approve") {
-      await db.insert(groupMembers).values({ groupId, userId: joinRequest.userId, role: "member" }).onConflictDoNothing();
+      const [existing] = await db.select().from(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, joinRequest.userId))).limit(1);
+      if (existing?.status === "removed") {
+        await db.update(groupMembers).set({ status: "active", role: "member", joinedAt: new Date(), updatedAt: new Date() }).where(eq(groupMembers.id, existing.id));
+      } else if (!existing) {
+        await db.insert(groupMembers).values({ groupId, userId: joinRequest.userId, role: "member" });
+      }
     }
     const [updated] = await db.update(groupJoinRequests).set({ status: body.action === "approve" ? "approved" : "rejected", reviewedBy: user.id, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(groupJoinRequests.id, body.requestId)).returning();
     return Response.json({ success: true, request: updated });
