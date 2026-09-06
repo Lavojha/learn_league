@@ -1,14 +1,17 @@
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { groupMembers, groups } from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { getGroupMembership } from "@/lib/groups/membership";
 import { userIdSchema } from "@/lib/validation/groups";
 
+const groupIdSchema = z.string().uuid();
+
 export async function POST(request: Request, { params }: { params: Promise<{ groupId: string }> }) {
   try {
     const user = await requireUser();
-    const { groupId } = await params;
+    const groupId = groupIdSchema.parse((await params).groupId);
     const newOwnerId = userIdSchema.parse((await request.json()).newOwnerId);
     const actor = await getGroupMembership(user.id, groupId);
     const target = await getGroupMembership(newOwnerId, groupId);
