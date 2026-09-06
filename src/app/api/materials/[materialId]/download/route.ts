@@ -15,8 +15,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ materialId
   const now = new Date();
 
   if (material.downloadStartMode === "after_access") {
-    const [session] = await db.select().from(materialAccessSessions).where(and(eq(materialAccessSessions.userId, user.id), eq(materialAccessSessions.materialId, materialId), inArray(materialAccessSessions.status, ["active", "paused", "expired", "ended"]))).orderBy(desc(materialAccessSessions.createdAt)).limit(1);
+    let [session] = await db.select().from(materialAccessSessions).where(and(eq(materialAccessSessions.userId, user.id), eq(materialAccessSessions.materialId, materialId), inArray(materialAccessSessions.status, ["active", "paused", "expired", "ended"]))).orderBy(desc(materialAccessSessions.createdAt)).limit(1);
     if (!session) return Response.json({ error: "You must complete viewing access before downloading" }, { status: 403 });
+    if ((session.status === "active" || session.status === "paused") && now >= session.expiresAt) {
+      [session] = await db.update(materialAccessSessions).set({ status: "expired", endedAt: now }).where(eq(materialAccessSessions.id, session.id)).returning();
+    }
     if (session.status === "active" || session.status === "paused") return Response.json({ error: "Download becomes available after viewing access ends" }, { status: 403 });
   }
   if (material.downloadAvailableFrom && now < material.downloadAvailableFrom) return Response.json({ error: "Download is not available yet" }, { status: 403 });
