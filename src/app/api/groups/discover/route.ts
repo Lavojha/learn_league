@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { groups } from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
@@ -9,10 +9,7 @@ export async function GET() {
     const rows = await db.select().from(groups).where(
       and(
         eq(groups.status, "active"),
-        or(
-          eq(groups.type, "public"),
-          eq(groups.visibility, "discoverable"),
-        ),
+        eq(groups.visibility, "discoverable"),
       ),
     );
 
