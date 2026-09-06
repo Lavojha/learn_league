@@ -5,9 +5,12 @@ import { useEffect, useState } from "react";
 
 type Task = { id: string; title: string; description: string | null; completed: boolean; dueAt: string | null };
 type Session = { id: string; startedAt: string; durationSeconds: number };
+
 export default function StudyPage() {
   const [tasks, setTasks] = useState<Task[]>([]); const [sessions, setSessions] = useState<Session[]>([]); const [title, setTitle] = useState(""); const [message, setMessage] = useState("");
   const load = async () => { const [t, s] = await Promise.all([fetch("/api/study/tasks"), fetch("/api/study/sessions")]); const td = await t.json(); const sd = await s.json(); setTasks(td.tasks ?? []); setSessions(sd.sessions ?? []); };
+  // Initial data hydration is intentionally performed once after the client mounts.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, []);
   const addTask = async (e: React.FormEvent) => { e.preventDefault(); if (!title.trim()) return; const r = await fetch("/api/study/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: title.trim(), completed: false }) }); const d = await r.json(); if (!r.ok) return setMessage(d.error ?? "Unable to add task"); setTasks(x => [d.task, ...x]); setTitle(""); setMessage("Task added."); };
   const toggle = async (task: Task) => { const r = await fetch("/api/study/tasks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: task.id, title: task.title, description: task.description, dueAt: task.dueAt, completed: !task.completed }) }); const d = await r.json(); if (!r.ok) return setMessage(d.error ?? "Unable to update task"); setTasks(x => x.map(v => v.id === task.id ? d.task : v)); };
