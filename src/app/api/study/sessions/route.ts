@@ -14,12 +14,14 @@ export async function POST(request: Request) {
   try {
     const user = await requireUser();
     const input = studySessionSchema.parse(await request.json());
+    const startedAt = input.startedAt ?? new Date();
+    if (startedAt > new Date()) return Response.json({ error: "Study session cannot start in the future" }, { status: 400 });
     if (input.personalMaterialId) {
       const [material] = await db.select({ id: personalMaterials.id }).from(personalMaterials).where(and(eq(personalMaterials.id, input.personalMaterialId), eq(personalMaterials.userId, user.id))).limit(1);
       if (!material) return Response.json({ error: "Personal material not found" }, { status: 404 });
     }
-    const startedAt = input.startedAt ?? new Date();
     const endedAt = new Date(startedAt.getTime() + input.durationSeconds * 1000);
+    if (endedAt > new Date()) return Response.json({ error: "Study session cannot end in the future" }, { status: 400 });
     const [session] = await db.insert(personalStudySessions).values({ userId: user.id, personalMaterialId: input.personalMaterialId ?? null, startedAt, endedAt, durationSeconds: input.durationSeconds }).returning();
     return Response.json({ success: true, session });
   } catch (error) {
