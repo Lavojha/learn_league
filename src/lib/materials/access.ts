@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { materialAccessSessions, materials } from "@/db/schema";
 import { getEffectiveExpiry, isMaterialAvailable } from "@/lib/materials/expiry";
@@ -16,7 +16,7 @@ export async function canStartMaterialAccess(userId: string, materialId: string,
 }
 
 export async function getActiveMaterialSession(userId: string, materialId: string) {
-  const [session] = await db.select().from(materialAccessSessions).where(and(eq(materialAccessSessions.userId, userId), eq(materialAccessSessions.materialId, materialId), inArray(materialAccessSessions.status, ["active", "paused"]))).limit(1);
+  const [session] = await db.select().from(materialAccessSessions).where(and(eq(materialAccessSessions.userId, userId), eq(materialAccessSessions.materialId, materialId), inArray(materialAccessSessions.status, ["active", "paused"]))).orderBy(desc(materialAccessSessions.createdAt)).limit(1);
   return session ?? null;
 }
 
