@@ -12,6 +12,7 @@ export default function MaterialViewerPage({ params }: { params: Promise<{ mater
   const [seconds, setSeconds] = useState<number | null>(null);
   const [message, setMessage] = useState("Starting secure study session…");
   const [allowPause, setAllowPause] = useState(false);
+  const [deviceId, setDeviceId] = useState("");
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -20,13 +21,14 @@ export default function MaterialViewerPage({ params }: { params: Promise<{ mater
     params.then(async ({ materialId }) => {
       if (cancelled) return;
       setId(materialId);
-      const deviceId = localStorage.getItem("learn-league-device") || crypto.randomUUID();
-      localStorage.setItem("learn-league-device", deviceId);
+      const currentDeviceId = localStorage.getItem("learn-league-device") || crypto.randomUUID();
+      localStorage.setItem("learn-league-device", currentDeviceId);
+      setDeviceId(currentDeviceId);
 
       const start = await fetch(`/api/materials/${materialId}/access`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId }),
+        body: JSON.stringify({ deviceId: currentDeviceId }),
       });
       const startData = await start.json();
       if (!start.ok) return setMessage(startData.error ?? "Unable to start access");
@@ -34,7 +36,7 @@ export default function MaterialViewerPage({ params }: { params: Promise<{ mater
       setSession(startData.session);
       setSeconds(Math.max(0, Math.floor((new Date(startData.session.expiresAt).getTime() - Date.now()) / 1000)));
 
-      const view = await fetch(`/api/materials/${materialId}/viewer?sessionId=${encodeURIComponent(startData.session.id)}&deviceId=${encodeURIComponent(deviceId)}`);
+      const view = await fetch(`/api/materials/${materialId}/viewer?sessionId=${encodeURIComponent(startData.session.id)}&deviceId=${encodeURIComponent(currentDeviceId)}`);
       const viewData = await view.json();
       if (!view.ok) return setMessage(viewData.error ?? "Unable to open PDF");
       setUrl(viewData.signedUrl ?? viewData.url);
@@ -61,14 +63,18 @@ export default function MaterialViewerPage({ params }: { params: Promise<{ mater
   }, [params]);
 
   const action = async (value: "pause" | "resume" | "end") => {
-    if (!session) return;
+    if (!session || !deviceId) return;
     const r = await fetch(`/api/materials/${id}/access`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: value, sessionId: session.id }),
+      body: JSON.stringify({ action: value, sessionId: session.id, deviceId }),
     });
     const data = await r.json();
-    if (!r.ok) return setMessage(data.error ?? "Unable to update session");
+    if (!r.ok) {
+      setMessage(data.error ?? "Unable to update session");
+      if (data.session) setSession(data.session);
+      return;
+    }
     setSession(data.session);
     if (value === "end") {
       setUrl("");
