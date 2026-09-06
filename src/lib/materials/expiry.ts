@@ -6,6 +6,6 @@ export function getEffectiveExpiry(sessionExpiresAt: Date, materialAvailableUnti
 
 export function isMaterialAvailable(now: Date, availableFrom?: Date | null, availableUntil?: Date | null) {
   if (availableFrom && now < availableFrom) return false;
-  if (availableUntil && now > availableUntil) return false;
+  if (availableUntil && now >= availableUntil) return false;
   return true;
 }
