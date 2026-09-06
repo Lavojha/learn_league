@@ -4,7 +4,7 @@ export function addMinutes(date: Date, minutes: number) {
 
 export function isDateInRange(date: Date, from?: Date | null, until?: Date | null) {
   if (from && date < from) return false;
-  if (until && date > until) return false;
+  if (until && date >= until) return false;
   return true;
 }
 
