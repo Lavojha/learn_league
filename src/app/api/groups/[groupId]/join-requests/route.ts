@@ -1,26 +1,35 @@
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { groupJoinRequests, groupMembers, groups } from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { hasGroupPermission } from "@/lib/groups/permissions";
 import { reviewJoinRequestSchema } from "@/lib/validation/groups";
 
+const groupIdSchema = z.string().uuid();
+
 export async function GET(_: Request, { params }: { params: Promise<{ groupId: string }> }) {
-  const user = await requireUser();
-  const { groupId } = await params;
-  if (!(await hasGroupPermission(user.id, groupId, "manageJoinRequests"))) return Response.json({ error: "Permission denied" }, { status: 403 });
-  const requests = await db.select().from(groupJoinRequests).where(and(eq(groupJoinRequests.groupId, groupId), eq(groupJoinRequests.status, "pending")));
-  return Response.json({ requests });
+  try {
+    const user = await requireUser();
+    const groupId = groupIdSchema.parse((await params).groupId);
+    const [group] = await db.select({ status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
+    if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
+    if (!(await hasGroupPermission(user.id, groupId, "manageJoinRequests"))) return Response.json({ error: "Permission denied" }, { status: 403 });
+    const requests = await db.select().from(groupJoinRequests).where(and(eq(groupJoinRequests.groupId, groupId), eq(groupJoinRequests.status, "pending")));
+    return Response.json({ requests });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load join requests" }, { status: 400 });
+  }
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ groupId: string }> }) {
   try {
     const user = await requireUser();
-    const { groupId } = await params;
+    const groupId = groupIdSchema.parse((await params).groupId);
     const body = reviewJoinRequestSchema.parse(await request.json());
-    if (!(await hasGroupPermission(user.id, groupId, "manageJoinRequests"))) return Response.json({ error: "Permission denied" }, { status: 403 });
     const [group] = await db.select({ status: groups.status, type: groups.type, visibility: groups.visibility }).from(groups).where(eq(groups.id, groupId)).limit(1);
     if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
+    if (!(await hasGroupPermission(user.id, groupId, "manageJoinRequests"))) return Response.json({ error: "Permission denied" }, { status: 403 });
     if (group.type !== "private" || group.visibility !== "discoverable") return Response.json({ error: "Join requests are only used for discoverable private groups" }, { status: 400 });
 
     const now = new Date();
