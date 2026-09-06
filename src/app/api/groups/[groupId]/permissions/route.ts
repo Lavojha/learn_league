@@ -1,26 +1,34 @@
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { groupMembers, groupPermissions, groups } from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { getDefaultRolePermissions, hasGroupPermission } from "@/lib/groups/permissions";
 import { isGroupRole } from "@/lib/groups/roles";
 
+const groupIdSchema = z.string().uuid();
 const permissionKeys = ["manageMembers", "manageMaterials", "manageGroupInfo", "manageInvitations", "manageJoinRequests", "manageContent"] as const;
 
 type PermissionValues = Record<(typeof permissionKeys)[number], boolean>;
 
 export async function GET(_: Request, { params }: { params: Promise<{ groupId: string }> }) {
-  const user = await requireUser();
-  const { groupId } = await params;
-  if (!(await hasGroupPermission(user.id, groupId, "manageMembers"))) return Response.json({ error: "Permission denied" }, { status: 403 });
-  const rows = await db.select().from(groupPermissions).where(eq(groupPermissions.groupId, groupId));
-  return Response.json({ permissions: rows });
+  try {
+    const user = await requireUser();
+    const groupId = groupIdSchema.parse((await params).groupId);
+    const [group] = await db.select({ status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
+    if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
+    if (!(await hasGroupPermission(user.id, groupId, "manageMembers"))) return Response.json({ error: "Permission denied" }, { status: 403 });
+    const rows = await db.select().from(groupPermissions).where(eq(groupPermissions.groupId, groupId));
+    return Response.json({ permissions: rows });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load permissions" }, { status: 400 });
+  }
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ groupId: string }> }) {
   try {
     const user = await requireUser();
-    const { groupId } = await params;
+    const groupId = groupIdSchema.parse((await params).groupId);
     const [actor] = await db.select().from(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, user.id), eq(groupMembers.status, "active"))).limit(1);
     const [group] = await db.select({ status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
     if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
