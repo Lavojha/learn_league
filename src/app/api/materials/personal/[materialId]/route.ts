@@ -16,19 +16,43 @@ export async function GET(_: Request, { params }: { params: Promise<{ materialId
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ materialId: string }> }) {
-  const user = await requireUser();
-  const { materialId } = await params;
-  const body = await request.json();
-  const [material] = await db.update(personalMaterials).set({ title: String(body.title ?? "").trim() || undefined, description: body.description === undefined ? undefined : String(body.description ?? "").trim() || null, updatedAt: new Date() }).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id))).returning();
-  return material ? Response.json({ success: true, material }) : Response.json({ error: "Material not found" }, { status: 404 });
+  try {
+    const user = await requireUser();
+    const { materialId } = await params;
+    personalMaterialIdSchema.parse(materialId);
+    const body = await request.json();
+    const title = body.title === undefined ? undefined : String(body.title).trim();
+    const description = body.description === undefined ? undefined : String(body.description ?? "").trim() || null;
+    if (title !== undefined && !title) return Response.json({ error: "Title cannot be empty" }, { status: 400 });
+
+    const [material] = await db.update(personalMaterials).set({
+      ...(title !== undefined ? { title } : {}),
+      ...(description !== undefined ? { description } : {}),
+      updatedAt: new Date(),
+    }).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id))).returning();
+
+    return material ? Response.json({ success: true, material }) : Response.json({ error: "Material not found" }, { status: 404 });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Invalid request" }, { status: 400 });
+  }
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ materialId: string }> }) {
-  const user = await requireUser();
-  const { materialId } = await params;
-  const [material] = await db.select().from(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id))).limit(1);
-  if (!material) return Response.json({ error: "Material not found" }, { status: 404 });
-  await db.delete(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id)));
-  await removeStoredFile(material.storageKey, true);
-  return Response.json({ success: true });
+  try {
+    const user = await requireUser();
+    const { materialId } = await params;
+    personalMaterialIdSchema.parse(materialId);
+    const [material] = await db.select().from(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id))).limit(1);
+    if (!material) return Response.json({ error: "Material not found" }, { status: 404 });
+
+    await db.delete(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id)));
+    try {
+      await removeStoredFile(material.storageKey, true);
+    } catch (storageError) {
+      console.error("Personal material storage cleanup failed:", storageError);
+    }
+    return Response.json({ success: true });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to delete material" }, { status: 400 });
+  }
 }
