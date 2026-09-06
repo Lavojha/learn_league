@@ -5,10 +5,12 @@ import { requireUser } from "@/lib/auth/require-user";
 import { getMaterial } from "@/lib/materials/access";
 import { canViewMaterial } from "@/lib/materials/permissions";
 import { createSignedFileUrl } from "@/lib/storage/supabase-storage";
+import { materialIdSchema } from "@/lib/validation/materials";
 
 export async function GET(request: Request, { params }: { params: Promise<{ materialId: string }> }) {
   const user = await requireUser();
   const { materialId } = await params;
+  materialIdSchema.parse(materialId);
   const material = await getMaterial(materialId);
   if (!material || material.status !== "published" || !(await canViewMaterial(user.id, materialId))) return Response.json({ error: "Material not found or inaccessible" }, { status: 404 });
 
