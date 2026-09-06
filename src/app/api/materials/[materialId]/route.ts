@@ -22,8 +22,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
     const { materialId } = await params;
     materialIdSchema.parse(materialId);
     if (!(await canManageMaterial(user.id, materialId))) return Response.json({ error: "Permission denied" }, { status: 403 });
-    const body = await request.json();
-    const input = updateMaterialSchema.parse(body);
+    const input = updateMaterialSchema.parse(await request.json());
     const [material] = await db.update(materials).set({
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
@@ -54,6 +53,6 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ materia
   const user = await requireUser();
   const { materialId } = await params;
   if (!(await canManageMaterial(user.id, materialId))) return Response.json({ error: "Permission denied" }, { status: 403 });
-  const [material] = await db.update(materials).set({ status: "archived", updatedAt: new Date() }).where(eq(and(eq(materials.id, materialId), eq(materials.status, "published")))).returning();
+  const [material] = await db.update(materials).set({ status: "archived", updatedAt: new Date() }).where(and(eq(materials.id, materialId), eq(materials.status, "published"))).returning();
   return material ? Response.json({ success: true }) : Response.json({ error: "Material not found" }, { status: 404 });
 }
