@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_MATERIAL_FILE_SIZE_BYTES, SUPPORTED_MATERIAL_MIME_TYPES } from "@/lib/constants";
 
 export const materialIdSchema = z.string().uuid();
 export const materialAvailabilityModeSchema = z.enum(["immediate", "scheduled"]);
@@ -54,3 +55,14 @@ export const createMaterialSchema = materialDetailsSchema
   .merge(materialAvailabilitySchema)
   .merge(materialAccessSettingsSchema)
   .merge(materialDownloadSettingsSchema);
+
+export const updateMaterialSchema = createMaterialSchema.partial();
+
+export function isSupportedPdf(mimeType: string, fileSizeBytes: number) {
+  return (
+    mimeType === SUPPORTED_MATERIAL_MIME_TYPES[0] &&
+    Number.isInteger(fileSizeBytes) &&
+    fileSizeBytes > 0 &&
+    fileSizeBytes <= MAX_MATERIAL_FILE_SIZE_BYTES
+  );
+}
