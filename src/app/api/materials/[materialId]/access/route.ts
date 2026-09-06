@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { materialAccessSessions } from "@/db/schema";
+import { requireUser } from "@/lib/auth/require-user";
 import { canStartMaterialAccess, getMaterial } from "@/lib/materials/access";
 import { createMaterialSession } from "@/lib/materials/sessions";
 import { earlierDate } from "@/lib/utils/dates";
