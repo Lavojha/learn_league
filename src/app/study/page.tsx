@@ -1,34 +1,17 @@
+"use client";
+
 import Link from "next/link";
-import { requireUser } from "@/lib/auth/require-user";
-import { db } from "@/db";
-import { personalStudySessions, personalTasks } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { useEffect, useState } from "react";
 
-export default async function StudyPage() {
-  const user = await requireUser();
-  const [tasks, sessions] = await Promise.all([
-    db.select().from(personalTasks).where(eq(personalTasks.userId, user.id)).orderBy(desc(personalTasks.createdAt)).limit(20),
-    db.select().from(personalStudySessions).where(eq(personalStudySessions.userId, user.id)).orderBy(desc(personalStudySessions.startedAt)).limit(10),
-  ]);
-  const openTasks = tasks.filter((task) => !task.completed);
-  const completedTasks = tasks.filter((task) => task.completed);
-  const totalSeconds = sessions.reduce((sum, session) => sum + session.durationSeconds, 0);
-
-  return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-10">
-      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><p className="text-sm text-violet-400">Learn League</p><h1 className="mt-1 text-3xl font-bold">Personal Study</h1><p className="muted mt-1">Study with or without your own material.</p></div>
-        <Link href="/study/timer" className="rounded-xl bg-violet-500 px-5 py-3 text-center font-semibold">Start timer</Link>
-      </header>
-      <div className="grid gap-5 md:grid-cols-3">
-        <section className="card p-5"><p className="muted text-sm">Study time</p><p className="mt-2 text-3xl font-bold">{Math.floor(totalSeconds / 3600)}h {Math.floor((totalSeconds % 3600) / 60)}m</p></section>
-        <section className="card p-5"><p className="muted text-sm">Open tasks</p><p className="mt-2 text-3xl font-bold">{openTasks.length}</p></section>
-        <section className="card p-5"><p className="muted text-sm">Completed tasks</p><p className="mt-2 text-3xl font-bold">{completedTasks.length}</p></section>
-      </div>
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <section className="card p-5"><div className="flex items-center justify-between"><h2 className="font-semibold">Tasks</h2><span className="muted text-xs">Personal only</span></div><div className="mt-4 space-y-3">{tasks.length ? tasks.map((task) => <div key={task.id} className={`rounded-xl bg-white/5 p-3 ${task.completed ? "opacity-50 line-through" : ""}`}>{task.title}{task.description ? <p className="muted mt-1 text-sm">{task.description}</p> : null}</div>) : <p className="muted text-sm">No tasks yet.</p>}</div></section>
-        <section className="card p-5"><div className="flex items-center justify-between"><h2 className="font-semibold">Recent sessions</h2><Link href="/study/history" className="text-sm text-violet-400">All history →</Link></div><div className="mt-4 space-y-3">{sessions.length ? sessions.map((session) => <div key={session.id} className="flex items-center justify-between rounded-xl bg-white/5 p-3"><span>{new Date(session.startedAt).toLocaleDateString()}</span><span className="muted">{Math.floor(session.durationSeconds / 60)} min</span></div>) : <p className="muted text-sm">No study sessions yet.</p>}</div></section>
-      </div>
-    </main>
-  );
+type Task = { id: string; title: string; description: string | null; completed: boolean; dueAt: string | null };
+type Session = { id: string; startedAt: string; durationSeconds: number };
+export default function StudyPage() {
+  const [tasks, setTasks] = useState<Task[]>([]); const [sessions, setSessions] = useState<Session[]>([]); const [title, setTitle] = useState(""); const [message, setMessage] = useState("");
+  const load = async () => { const [t, s] = await Promise.all([fetch("/api/study/tasks"), fetch("/api/study/sessions")]); const td = await t.json(); const sd = await s.json(); setTasks(td.tasks ?? []); setSessions(sd.sessions ?? []); };
+  useEffect(() => { void load(); }, []);
+  const addTask = async (e: React.FormEvent) => { e.preventDefault(); if (!title.trim()) return; const r = await fetch("/api/study/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: title.trim(), completed: false }) }); const d = await r.json(); if (!r.ok) return setMessage(d.error ?? "Unable to add task"); setTasks(x => [d.task, ...x]); setTitle(""); setMessage("Task added."); };
+  const toggle = async (task: Task) => { const r = await fetch("/api/study/tasks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: task.id, title: task.title, description: task.description, dueAt: task.dueAt, completed: !task.completed }) }); const d = await r.json(); if (!r.ok) return setMessage(d.error ?? "Unable to update task"); setTasks(x => x.map(v => v.id === task.id ? d.task : v)); };
+  const remove = async (id: string) => { const r = await fetch("/api/study/tasks", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); if (r.ok) setTasks(x => x.filter(v => v.id !== id)); };
+  const totalSeconds = sessions.reduce((sum, s) => sum + s.durationSeconds, 0);
+  return <main className="mx-auto min-h-screen max-w-6xl px-6 py-10"><header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-violet-400">Learn League</p><h1 className="mt-1 text-3xl font-bold">Personal Study</h1><p className="muted mt-1">Study with or without your own material.</p></div><Link href="/study/timer" className="rounded-xl bg-violet-500 px-5 py-3 text-center font-semibold">Start timer</Link></header><div className="grid gap-5 md:grid-cols-3"><section className="card p-5"><p className="muted text-sm">Study time</p><p className="mt-2 text-3xl font-bold">{Math.floor(totalSeconds / 3600)}h {Math.floor((totalSeconds % 3600) / 60)}m</p></section><section className="card p-5"><p className="muted text-sm">Open tasks</p><p className="mt-2 text-3xl font-bold">{tasks.filter(t => !t.completed).length}</p></section><section className="card p-5"><p className="muted text-sm">Completed</p><p className="mt-2 text-3xl font-bold">{tasks.filter(t => t.completed).length}</p></section></div><div className="mt-5 grid gap-5 lg:grid-cols-2"><section className="card p-5"><div className="flex items-center justify-between"><h2 className="font-semibold">Tasks</h2><span className="muted text-xs">Personal only</span></div><form onSubmit={addTask} className="mt-4 flex gap-2"><input value={title} onChange={e => setTitle(e.target.value)} className="input" placeholder="Add a study task…" /><button className="rounded-xl bg-violet-500 px-4 font-semibold">Add</button></form><div className="mt-4 space-y-2">{tasks.map(t => <div key={t.id} className="flex items-center gap-3 rounded-xl bg-white/5 p-3"><input type="checkbox" checked={t.completed} onChange={() => void toggle(t)} /><span className={`flex-1 text-sm ${t.completed ? "line-through opacity-50" : ""}`}>{t.title}</span><button onClick={() => void remove(t.id)} className="text-xs text-rose-300">Delete</button></div>)}{!tasks.length && <p className="muted text-sm">No tasks yet.</p>}</div>{message && <p className="mt-4 text-xs text-violet-300">{message}</p>}</section><section className="card p-5"><div className="flex items-center justify-between"><h2 className="font-semibold">Recent sessions</h2><Link href="/study/history" className="text-sm text-violet-400">All history →</Link></div><div className="mt-4 space-y-3">{sessions.slice(0, 10).map(s => <div key={s.id} className="flex items-center justify-between rounded-xl bg-white/5 p-3"><span>{new Date(s.startedAt).toLocaleDateString()}</span><span className="muted">{Math.floor(s.durationSeconds / 60)} min</span></div>)}{!sessions.length && <p className="muted text-sm">No study sessions yet.</p>}</div></section></div></main>;
 }
