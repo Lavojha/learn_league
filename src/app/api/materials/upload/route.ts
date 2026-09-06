@@ -2,15 +2,18 @@ import { requireUser } from "@/lib/auth/require-user";
 import { hasGroupPermission } from "@/lib/groups/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { isSupportedPdf } from "@/lib/validation/materials";
+import { z } from "zod";
 import { randomUUID } from "node:crypto";
+
+const groupIdSchema = z.string().uuid();
 
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
     const form = await request.formData();
-    const groupId = String(form.get("groupId") ?? "").trim();
+    const groupId = groupIdSchema.parse(String(form.get("groupId") ?? "").trim());
     const file = form.get("file");
-    if (!groupId || !(await hasGroupPermission(user.id, groupId, "manageMaterials"))) return Response.json({ error: "Permission denied" }, { status: 403 });
+    if (!(await hasGroupPermission(user.id, groupId, "manageMaterials"))) return Response.json({ error: "Permission denied" }, { status: 403 });
     if (!(file instanceof File)) return Response.json({ error: "PDF file is required" }, { status: 400 });
     if (!isSupportedPdf(file.type, file.size)) return Response.json({ error: "Only PDF files up to 25 MB are supported" }, { status: 400 });
 
