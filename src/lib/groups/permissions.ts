@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { groupPermissions } from "@/db/schema";
+import { groupPermissions, groups } from "@/db/schema";
 import { getGroupMembership } from "@/lib/groups/membership";
 import type { GroupRole } from "@/lib/groups/roles";
 
@@ -71,8 +71,15 @@ export async function hasGroupPermission(
   groupId: string,
   permission: GroupPermission,
 ) {
+  const [group] = await db
+    .select({ status: groups.status })
+    .from(groups)
+    .where(eq(groups.id, groupId))
+    .limit(1);
+  if (!group || group.status !== "active") return false;
+
   const membership = await getGroupMembership(userId, groupId);
-  if (!membership) return false;
+  if (!membership || membership.status !== "active") return false;
 
   if (membership.role === "owner") return true;
 
