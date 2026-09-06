@@ -27,11 +27,13 @@ export async function POST(request: Request) {
     const groupId = createId();
     const inviteCode = input.type === "private" ? createId().replaceAll("-", "").slice(0, 10).toUpperCase() : null;
 
-    const [group] = await db.insert(groups).values({ id: groupId, name: input.name, description: input.description ?? null, type: input.type, visibility: input.visibility, ownerId: user.id, inviteCode }).returning();
-    await db.insert(groupMembers).values({ groupId, userId: user.id, role: "owner", status: "active" });
-    for (const role of ["owner", "co_owner", "admin", "member"] as const) {
-      await db.insert(groupPermissions).values({ groupId, role, ...getDefaultRolePermissions(role) });
-    }
+    const group = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(groups).values({ id: groupId, name: input.name, description: input.description ?? null, type: input.type, visibility: input.visibility, ownerId: user.id, inviteCode }).returning();
+      if (!created) throw new Error("Unable to create group");
+      await tx.insert(groupMembers).values({ groupId, userId: user.id, role: "owner", status: "active" });
+      await tx.insert(groupPermissions).values(["owner", "co_owner", "admin", "member"].map((role) => ({ groupId, role: role as "owner" | "co_owner" | "admin" | "member", ...getDefaultRolePermissions(role as "owner" | "co_owner" | "admin" | "member") })));
+      return created;
+    });
     return Response.json({ group }, { status: 201 });
   } catch (error) {
     console.error(error);
