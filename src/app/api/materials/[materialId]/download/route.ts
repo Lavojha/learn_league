@@ -11,8 +11,19 @@ export async function GET(_: Request, { params }: { params: Promise<{ materialId
   const { materialId } = await params;
   const material = await getMaterial(materialId);
   if (!material || material.status !== "published" || !(await canViewMaterial(user.id, materialId))) return Response.json({ error: "Material not found or inaccessible" }, { status: 404 });
-  if (!material.downloadEnabled) return Response.json({ error: "Download is disabled" }, { status: 403 });
+
   const now = new Date();
+  const availabilityExpired = Boolean(material.availableUntil && now >= material.availableUntil);
+  const expiryAllowsDownload = availabilityExpired && material.expiryAction === "enable_download";
+
+  if (availabilityExpired && material.expiryAction === "archive") {
+    await db.update(materialAccessSessions).set({ status: "expired", endedAt: now }).where(and(eq(materialAccessSessions.materialId, materialId), inArray(materialAccessSessions.status, ["active", "paused"]), eq(materialAccessSessions.userId, user.id)));
+    return Response.json({ error: "Material has expired and is archived" }, { status: 403 });
+  }
+  if (availabilityExpired && material.expiryAction === "remove_access") return Response.json({ error: "Material access has expired" }, { status: 403 });
+
+  const downloadEnabled = material.downloadEnabled || expiryAllowsDownload;
+  if (!downloadEnabled) return Response.json({ error: "Download is disabled" }, { status: 403 });
 
   if (material.downloadStartMode === "after_access") {
     let [session] = await db.select().from(materialAccessSessions).where(and(eq(materialAccessSessions.userId, user.id), eq(materialAccessSessions.materialId, materialId), inArray(materialAccessSessions.status, ["active", "paused", "expired", "ended"]))).orderBy(desc(materialAccessSessions.createdAt)).limit(1);
