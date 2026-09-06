@@ -7,7 +7,7 @@ import { isGroupRole } from "@/lib/groups/roles";
 
 const permissionKeys = ["manageMembers", "manageMaterials", "manageGroupInfo", "manageInvitations", "manageJoinRequests", "manageContent"] as const;
 
-type PermissionKey = (typeof permissionKeys)[number];
+type PermissionValues = Record<(typeof permissionKeys)[number], boolean>;
 
 export async function GET(_: Request, { params }: { params: Promise<{ groupId: string }> }) {
   const user = await requireUser();
@@ -31,8 +31,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ gr
     if (!isGroupRole(role)) return Response.json({ error: "Invalid role" }, { status: 400 });
     if (!body.permissions || typeof body.permissions !== "object" || Array.isArray(body.permissions)) return Response.json({ error: "permissions must be an object" }, { status: 400 });
 
-    const defaults = getDefaultRolePermissions(role);
-    const values = { ...defaults };
+    const defaults = getDefaultRolePermissions(role) as PermissionValues;
+    const values: PermissionValues = { ...defaults };
     for (const key of permissionKeys) {
       if (key in body.permissions) {
         if (typeof body.permissions[key] !== "boolean") return Response.json({ error: `${key} must be boolean` }, { status: 400 });
