@@ -11,8 +11,17 @@ export async function createMaterialSession(userId: string, materialId: string, 
   const expiresAt = calculateSessionExpiry(material, startedAt);
   if (!expiresAt || expiresAt <= startedAt) throw new Error("Material access has expired");
 
-  const [session] = await db.insert(materialAccessSessions).values({ userId, materialId, deviceId, startedAt, expiresAt, status: "active" }).returning();
-  return session;
+  try {
+    const [session] = await db.insert(materialAccessSessions).values({ userId, materialId, deviceId, startedAt, expiresAt, status: "active" }).returning();
+    if (!session) throw new Error("Unable to start material session");
+    return session;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to start material session";
+    if (message.toLowerCase().includes("duplicate key") || message.toLowerCase().includes("unique constraint")) {
+      throw new Error("This material is already open in another active session");
+    }
+    throw error;
+  }
 }
 
 export async function getMaterialSession(userId: string, materialId: string, sessionId: string) {
@@ -21,6 +30,6 @@ export async function getMaterialSession(userId: string, materialId: string, ses
 }
 
 export async function endMaterialSession(userId: string, sessionId: string) {
-  const [session] = await db.update(materialAccessSessions).set({ status: "ended", endedAt: new Date() }).where(and(eq(materialAccessSessions.id, sessionId), eq(materialAccessSessions.userId, userId))).returning();
+  const [session] = await db.update(materialAccessSessions).set({ status: "ended", endedAt: new Date() }).where(and(eq(materialAccessSessions.id, sessionId), eq(materialAccessSessions.userId, userId), inArray(materialAccessSessions.status, ["active", "paused"]))).returning();
   return session ?? null;
 }
