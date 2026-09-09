@@ -14,8 +14,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ groupId: s
     const user = await requireUser();
     const groupId = groupIdSchema.parse((await params).groupId);
     if (!(await canAccessGroup(user.id, groupId))) return Response.json({ error: "Group not found or inaccessible" }, { status: 404 });
-    const [group] = await db.select().from(groups).where(eq(groups.id, groupId)).limit(1);
-    return Response.json({ group });
+    const [group] = await db.select().from(groups).where(and(eq(groups.id, groupId), eq(groups.status, "active"))).limit(1);
+    return group ? Response.json({ group }) : Response.json({ error: "Group not found" }, { status: 404 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to load group" }, { status: 400 });
   }
