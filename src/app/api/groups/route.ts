@@ -31,7 +31,8 @@ export async function POST(request: Request) {
     const group = await db.transaction(async (tx) => {
       const [created] = await tx.insert(groups).values({ id: groupId, name: input.name, description: input.description ?? null, type: input.type, visibility: input.visibility, ownerId: user.id, inviteCode }).returning();
       if (!created) throw new Error("Unable to create group");
-      await tx.insert(groupMembers).values({ groupId, userId: user.id, role: "owner", status: "active" });
+      const [ownerMembership] = await tx.insert(groupMembers).values({ groupId, userId: user.id, role: "owner", status: "active" }).returning({ id: groupMembers.id });
+      if (!ownerMembership) throw new Error("Unable to create owner membership");
       await tx.insert(groupPermissions).values(ROLE_LIST.map((role) => ({ groupId, role, ...getDefaultRolePermissions(role) })));
       return created;
     });
