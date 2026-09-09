@@ -1,7 +1,12 @@
 export const GROUP_ROLES = ["owner", "co_owner", "admin", "member"] as const;
 export type GroupRole = (typeof GROUP_ROLES)[number];
 
-export const ROLE_LEVEL: Record<GroupRole, number> = { owner: 4, co_owner: 3, admin: 2, member: 1 };
+export const ROLE_LEVEL: Record<GroupRole, number> = {
+  owner: 4,
+  co_owner: 3,
+  admin: 2,
+  member: 1,
+};
 
 export function isGroupRole(value: string): value is GroupRole {
   return (GROUP_ROLES as readonly string[]).includes(value);
