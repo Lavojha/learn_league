@@ -22,25 +22,47 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
     const { materialId } = await params;
     materialIdSchema.parse(materialId);
     if (!(await canManageMaterial(user.id, materialId))) return Response.json({ error: "Permission denied" }, { status: 403 });
+
     const input = updateMaterialSchema.parse(await request.json());
     const material = await db.transaction(async (tx) => {
+      const [current] = await tx.select().from(materials).where(and(eq(materials.id, materialId), eq(materials.status, "published"))).limit(1);
+      if (!current) throw new Error("Material not found");
+
+      const merged = {
+        title: input.title ?? current.title,
+        description: input.description !== undefined ? input.description : current.description,
+        tags: input.tags ?? [],
+        availabilityMode: input.availabilityMode ?? current.availabilityMode,
+        availableFrom: input.availableFrom !== undefined ? input.availableFrom : current.availableFrom,
+        availableUntil: input.availableUntil !== undefined ? input.availableUntil : current.availableUntil,
+        accessDurationMinutes: input.accessDurationMinutes ?? current.accessDurationMinutes,
+        allowPause: input.allowPause ?? current.allowPause,
+        expiryAction: input.expiryAction ?? current.expiryAction,
+        downloadEnabled: input.downloadEnabled ?? current.downloadEnabled,
+        downloadStartMode: input.downloadStartMode !== undefined ? input.downloadStartMode : current.downloadStartMode,
+        downloadAvailableFrom: input.downloadAvailableFrom !== undefined ? input.downloadAvailableFrom : current.downloadAvailableFrom,
+        downloadAvailableUntil: input.downloadAvailableUntil !== undefined ? input.downloadAvailableUntil : current.downloadAvailableUntil,
+      };
+      updateMaterialSchema.parse(merged);
+
       const [updated] = await tx.update(materials).set({
-        ...(input.title !== undefined ? { title: input.title } : {}),
-        ...(input.description !== undefined ? { description: input.description } : {}),
-        ...(input.availabilityMode !== undefined ? { availabilityMode: input.availabilityMode } : {}),
-        ...(input.availableFrom !== undefined ? { availableFrom: input.availableFrom } : {}),
-        ...(input.availableUntil !== undefined ? { availableUntil: input.availableUntil } : {}),
-        ...(input.accessDurationMinutes !== undefined ? { accessDurationMinutes: input.accessDurationMinutes } : {}),
-        ...(input.allowPause !== undefined ? { allowPause: input.allowPause } : {}),
-        ...(input.downloadEnabled !== undefined ? { downloadEnabled: input.downloadEnabled } : {}),
-        ...(input.downloadStartMode !== undefined ? { downloadStartMode: input.downloadStartMode } : {}),
-        ...(input.downloadAvailableFrom !== undefined ? { downloadAvailableFrom: input.downloadAvailableFrom } : {}),
-        ...(input.downloadAvailableUntil !== undefined ? { downloadAvailableUntil: input.downloadAvailableUntil } : {}),
-        ...(input.expiryAction !== undefined ? { expiryAction: input.expiryAction } : {}),
+        title: merged.title,
+        description: merged.description,
+        availabilityMode: merged.availabilityMode,
+        availableFrom: merged.availableFrom,
+        availableUntil: merged.availableUntil,
+        accessDurationMinutes: merged.accessDurationMinutes,
+        allowPause: merged.allowPause,
+        downloadEnabled: merged.downloadEnabled,
+        downloadStartMode: merged.downloadStartMode,
+        downloadAvailableFrom: merged.downloadAvailableFrom,
+        downloadAvailableUntil: merged.downloadAvailableUntil,
+        expiryAction: merged.expiryAction,
         updatedAt: new Date(),
       }).where(and(eq(materials.id, materialId), eq(materials.status, "published"))).returning();
-      if (!updated) throw new Error("Material not found");
-      if (input.tags) {
+      if (!updated) throw new Error("Material changed; please refresh and try again");
+
+      if (input.tags !== undefined) {
         await tx.delete(materialTags).where(eq(materialTags.materialId, materialId));
         const tags = normalizeTags(input.tags);
         if (tags.length) await tx.insert(materialTags).values(tags.map((tag) => ({ materialId, tag })));
