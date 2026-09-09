@@ -18,10 +18,10 @@ export async function createClient() {
 
   return createServerClient(url, anonKey, {
     cookies: {
-      async getAll() {
+      getAll() {
         return cookieStore.getAll();
       },
-      async setAll(cookiesToSet) {
+      setAll(cookiesToSet) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
