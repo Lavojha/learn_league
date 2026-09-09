@@ -43,13 +43,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ gr
       if (!joinRequest) throw new Error("Request not found or already reviewed");
       const [existing] = await tx.select().from(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, joinRequest.userId))).limit(1);
       let member;
-      if (existing?.status === "active") {
-        member = existing;
-      } else if (existing?.status === "removed") {
-        [member] = await tx.update(groupMembers).set({ status: "active", role: "member", joinedAt: now, updatedAt: now }).where(and(eq(groupMembers.id, existing.id), eq(groupMembers.status, "removed"))).returning();
-      } else {
-        [member] = await tx.insert(groupMembers).values({ groupId, userId: joinRequest.userId, role: "member" }).onConflictDoNothing().returning();
-      }
+      if (existing?.status === "active") member = existing;
+      else if (existing?.status === "removed") [member] = await tx.update(groupMembers).set({ status: "active", role: "member", joinedAt: now, updatedAt: now }).where(and(eq(groupMembers.id, existing.id), eq(groupMembers.status, "removed"))).returning();
+      else [member] = await tx.insert(groupMembers).values({ groupId, userId: joinRequest.userId, role: "member" }).onConflictDoNothing().returning();
       if (!member) throw new Error("Unable to create membership");
       const [updated] = await tx.update(groupJoinRequests).set({ status: "approved", reviewedBy: user.id, reviewedAt: now, updatedAt: now }).where(and(eq(groupJoinRequests.id, body.requestId), eq(groupJoinRequests.status, "pending"))).returning();
       if (!updated) throw new Error("Request was already reviewed");
