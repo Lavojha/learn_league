@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { groups } from "@/db/schema";
@@ -10,11 +10,15 @@ import { updateGroupSchema } from "@/lib/validation/groups";
 const groupIdSchema = z.string().uuid();
 
 export async function GET(_: Request, { params }: { params: Promise<{ groupId: string }> }) {
-  const user = await requireUser();
-  const groupId = groupIdSchema.parse((await params).groupId);
-  if (!(await canAccessGroup(user.id, groupId))) return Response.json({ error: "Group not found or inaccessible" }, { status: 404 });
-  const [group] = await db.select().from(groups).where(eq(groups.id, groupId)).limit(1);
-  return Response.json({ group });
+  try {
+    const user = await requireUser();
+    const groupId = groupIdSchema.parse((await params).groupId);
+    if (!(await canAccessGroup(user.id, groupId))) return Response.json({ error: "Group not found or inaccessible" }, { status: 404 });
+    const [group] = await db.select().from(groups).where(eq(groups.id, groupId)).limit(1);
+    return Response.json({ group });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load group" }, { status: 400 });
+  }
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ groupId: string }> }) {
@@ -28,8 +32,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ gr
     const nextType = input.type ?? current.type;
     const nextVisibility = input.visibility ?? current.visibility;
     if (nextType === "public" && nextVisibility === "hidden") return Response.json({ error: "Public groups must be discoverable" }, { status: 400 });
-    const [group] = await db.update(groups).set({ ...input, updatedAt: new Date() }).where(eq(groups.id, groupId)).returning();
-    return group ? Response.json({ success: true, group }) : Response.json({ error: "Group not found" }, { status: 404 });
+    const [group] = await db.update(groups).set({ ...input, updatedAt: new Date() }).where(and(eq(groups.id, groupId), eq(groups.status, "active"))).returning();
+    return group ? Response.json({ success: true, group }) : Response.json({ error: "Group changed; please refresh" }, { status: 409 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Invalid request" }, { status: 400 });
   }
@@ -42,8 +46,8 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ groupId
     const [current] = await db.select({ status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
     if (!current || current.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
     if (!(await hasGroupPermission(user.id, groupId, "manageGroupInfo"))) return Response.json({ error: "Permission denied" }, { status: 403 });
-    const [group] = await db.update(groups).set({ status: "archived", updatedAt: new Date() }).where(eq(groups.id, groupId)).returning();
-    return group ? Response.json({ success: true }) : Response.json({ error: "Group not found" }, { status: 404 });
+    const [group] = await db.update(groups).set({ status: "archived", updatedAt: new Date() }).where(and(eq(groups.id, groupId), eq(groups.status, "active"))).returning();
+    return group ? Response.json({ success: true }) : Response.json({ error: "Group changed; please refresh" }, { status: 409 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to archive group" }, { status: 400 });
   }
