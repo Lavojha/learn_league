@@ -16,7 +16,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ groupId: s
     const [group] = await db.select({ status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
     if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
     if (!(await getGroupMembership(user.id, groupId))) return Response.json({ error: "Not a group member" }, { status: 403 });
-    const members = await db.select().from(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.status, "active")));
+    const members = await db.select({ id: groupMembers.id, groupId: groupMembers.groupId, userId: groupMembers.userId, role: groupMembers.role, status: groupMembers.status, joinedAt: groupMembers.joinedAt, updatedAt: groupMembers.updatedAt }).from(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.status, "active")));
     return Response.json({ members });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to load members" }, { status: 400 });
