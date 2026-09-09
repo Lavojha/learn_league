@@ -14,7 +14,7 @@ export async function GET() {
     const memberships = await db.select({ groupId: groupMembers.groupId }).from(groupMembers).where(and(eq(groupMembers.userId, user.id), eq(groupMembers.status, "active")));
     const ids = memberships.map((m) => m.groupId);
     if (ids.length === 0) return Response.json({ groups: [] });
-    const rows = await db.select().from(groups).where(and(inArray(groups.id, ids), eq(groups.status, "active")));
+    const rows = await db.select({ id: groups.id, name: groups.name, description: groups.description, type: groups.type, visibility: groups.visibility, status: groups.status, ownerId: groups.ownerId, createdAt: groups.createdAt, updatedAt: groups.updatedAt }).from(groups).where(and(inArray(groups.id, ids), eq(groups.status, "active")));
     return Response.json({ groups: rows });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to load groups" }, { status: 500 });
@@ -27,7 +27,6 @@ export async function POST(request: Request) {
     const input = createGroupSchema.parse(await request.json());
     const groupId = createId();
     const inviteCode = input.type === "private" ? createId().replaceAll("-", "").slice(0, 10).toUpperCase() : null;
-
     const group = await db.transaction(async (tx) => {
       const [created] = await tx.insert(groups).values({ id: groupId, name: input.name, description: input.description ?? null, type: input.type, visibility: input.visibility, ownerId: user.id, inviteCode }).returning();
       if (!created) throw new Error("Unable to create group");
