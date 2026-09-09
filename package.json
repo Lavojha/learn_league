@@ -12,8 +12,10 @@
   "dependencies": {
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
+    "@tailwindcss/postcss": "latest",
     "drizzle-orm": "latest",
     "next": "latest",
+    "postcss": "latest",
     "postgres": "latest",
     "react": "latest",
     "react-dom": "latest",
