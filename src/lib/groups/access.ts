@@ -21,7 +21,7 @@ export async function canAccessGroup(userId: string, groupId: string) {
 export async function requireGroupMember(userId: string, groupId: string) {
   const membership = await getGroupMembership(userId, groupId);
   if (!membership) {
-    throw new Error("You are not a member of this group");
+    throw new Error("You are not an active member of this group");
   }
   return membership;
 }
