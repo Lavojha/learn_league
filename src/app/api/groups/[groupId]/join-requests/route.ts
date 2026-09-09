@@ -46,7 +46,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ gr
       if (existing?.status === "active") {
         member = existing;
       } else if (existing?.status === "removed") {
-        [member] = await tx.update(groupMembers).set({ status: "active", role: "member", joinedAt: now, updatedAt: now }).where(eq(groupMembers.id, existing.id)).returning();
+        [member] = await tx.update(groupMembers).set({ status: "active", role: "member", joinedAt: now, updatedAt: now }).where(and(eq(groupMembers.id, existing.id), eq(groupMembers.status, "removed"))).returning();
       } else {
         [member] = await tx.insert(groupMembers).values({ groupId, userId: joinRequest.userId, role: "member" }).onConflictDoNothing().returning();
       }
