@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { personalMaterials } from "@/db/schema";
@@ -8,22 +8,34 @@ import { createSignedFileUrl, removeStoredFile } from "@/lib/storage/supabase-st
 const materialIdSchema = z.string().uuid();
 
 export async function GET(_: Request, { params }: { params: Promise<{ materialId: string }> }) {
-  const user = await requireUser();
-  const { materialId: rawMaterialId } = await params;
-  const materialId = materialIdSchema.parse(rawMaterialId);
-  const [material] = await db.select().from(personalMaterials).where(eq(personalMaterials.id, materialId)).limit(1);
-  if (!material || material.userId !== user.id) return Response.json({ error: "Material not found" }, { status: 404 });
-  const signedUrl = await createSignedFileUrl(material.storageKey, true, 300);
-  return Response.json({ material, signedUrl });
+  try {
+    const user = await requireUser();
+    const { materialId: rawMaterialId } = await params;
+    const materialId = materialIdSchema.parse(rawMaterialId);
+    const [material] = await db.select().from(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id))).limit(1);
+    if (!material) return Response.json({ error: "Material not found" }, { status: 404 });
+    const signedUrl = await createSignedFileUrl(material.storageKey, true, 300);
+    return Response.json({ material, signedUrl });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load material" }, { status: 400 });
+  }
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ materialId: string }> }) {
-  const user = await requireUser();
-  const { materialId: rawMaterialId } = await params;
-  const materialId = materialIdSchema.parse(rawMaterialId);
-  const [material] = await db.select().from(personalMaterials).where(eq(personalMaterials.id, materialId)).limit(1);
-  if (!material || material.userId !== user.id) return Response.json({ error: "Material not found" }, { status: 404 });
-  await removeStoredFile(material.storageKey, true);
-  await db.delete(personalMaterials).where(eq(personalMaterials.id, materialId));
-  return Response.json({ success: true });
+  try {
+    const user = await requireUser();
+    const { materialId: rawMaterialId } = await params;
+    const materialId = materialIdSchema.parse(rawMaterialId);
+    const [material] = await db.select().from(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id))).limit(1);
+    if (!material) return Response.json({ error: "Material not found" }, { status: 404 });
+    await db.delete(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id)));
+    try {
+      await removeStoredFile(material.storageKey, true);
+    } catch (storageError) {
+      console.error("Personal study material storage cleanup failed:", storageError);
+    }
+    return Response.json({ success: true });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to delete material" }, { status: 400 });
+  }
 }
