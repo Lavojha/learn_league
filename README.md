@@ -2,6 +2,17 @@
 
 Learn League is a study-group platform for focused personal study and collaborative learning.
 
+## Development toolchain
+
+- Node.js `22.19.0`
+- npm `11.x`
+- Next.js `15.5.3`
+- React `19.1.1`
+- TypeScript `5.9.2`
+- Tailwind CSS `4.1.13`
+
+The project pins dependency versions so local development and CI resolve the same package versions. Use the `.nvmrc` file (or a Node version manager) to select Node 22.19.0.
+
 ## Current MVP
 
 - Supabase Auth with protected app routes
@@ -20,11 +31,12 @@ Next.js + React + TypeScript + Tailwind CSS, PostgreSQL/Supabase, Drizzle ORM, Z
 
 ## Local setup
 
-1. Copy `.env.example` to `.env.local`.
-2. Fill `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-3. Install dependencies with `npm install`.
-4. Run `npm run dev`.
-5. Verify with `npm run lint`, `npm run typecheck`, and `npm run build`.
+1. Select Node.js `22.19.0` (for example with `nvm use`).
+2. Copy `.env.example` to `.env.local`.
+3. Fill `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+4. Install dependencies with `npm install`.
+5. Run `npm run dev`.
+6. Verify with `npm run lint`, `npm run typecheck`, and `npm run build`.
 
 ## Supabase setup
 
