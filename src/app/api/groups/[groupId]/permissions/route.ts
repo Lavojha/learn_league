@@ -1,14 +1,13 @@
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "@/db";
 import { groupMembers, groupPermissions, groups } from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { getDefaultRolePermissions, hasGroupPermission } from "@/lib/groups/permissions";
 import { isGroupRole } from "@/lib/groups/roles";
+import { z } from "zod";
 
 const groupIdSchema = z.string().uuid();
 const permissionKeys = ["manageMembers", "manageMaterials", "manageGroupInfo", "manageInvitations", "manageJoinRequests", "manageContent"] as const;
-
 type PermissionValues = Record<(typeof permissionKeys)[number], boolean>;
 
 export async function GET(_: Request, { params }: { params: Promise<{ groupId: string }> }) {
@@ -49,7 +48,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ gr
     }
 
     const [row] = await db.insert(groupPermissions).values({ groupId, role, ...values }).onConflictDoUpdate({ target: [groupPermissions.groupId, groupPermissions.role], set: { ...values, updatedAt: new Date() } }).returning();
-    return Response.json({ success: true, permissions: row });
+    return row ? Response.json({ success: true, permissions: row }) : Response.json({ error: "Unable to save permissions" }, { status: 409 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Invalid request" }, { status: 400 });
   }
