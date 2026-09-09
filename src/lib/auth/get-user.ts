@@ -1,16 +1,14 @@
+import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 
-export async function getUser() {
+export async function getUser(): Promise<User | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser();
 
   if (error) {
     console.error("Failed to get authenticated user:", error);
     return null;
   }
 
-  return user;
+  return data.user;
 }
