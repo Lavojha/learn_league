@@ -35,14 +35,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ groupId: 
     if (!current || current.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
     if (current.type !== "private") return Response.json({ error: "Invite codes are only used for private groups" }, { status: 400 });
 
-    let code = normalizeInviteCode(generateInviteCode());
     for (let attempt = 0; attempt < 5; attempt++) {
+      const code = normalizeInviteCode(generateInviteCode());
       const [existing] = await db.select({ id: groups.id }).from(groups).where(eq(groups.inviteCode, code)).limit(1);
-      if (!existing) break;
-      code = normalizeInviteCode(generateInviteCode());
+      if (existing) continue;
+      const [group] = await db.update(groups).set({ inviteCode: code, updatedAt: new Date() }).where(and(eq(groups.id, groupId), eq(groups.status, "active"))).returning({ inviteCode: groups.inviteCode });
+      if (group) return Response.json({ success: true, inviteCode: group.inviteCode });
+      return Response.json({ error: "Group changed; please refresh" }, { status: 409 });
     }
-    const [group] = await db.update(groups).set({ inviteCode: code, updatedAt: new Date() }).where(and(eq(groups.id, groupId), eq(groups.status, "active"))).returning({ inviteCode: groups.inviteCode });
-    return group ? Response.json({ success: true, inviteCode: group.inviteCode }) : Response.json({ error: "Group not found" }, { status: 404 });
+    return Response.json({ error: "Unable to generate a unique invite code" }, { status: 503 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to generate invite code" }, { status: 400 });
   }
