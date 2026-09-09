@@ -11,7 +11,16 @@ Learn League is a study-group platform for focused personal study and collaborat
 - TypeScript `5.9.2`
 - Tailwind CSS `4.1.13`
 
-The project pins dependency versions so local development and CI resolve the same package versions. Use the `.nvmrc` file (or a Node version manager) to select Node 22.19.0.
+The project pins dependency versions so local development and CI resolve the same package versions. Use `.nvmrc` to select Node 22.19.0.
+
+## Local verification
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm run build
+```
 
 ## Current MVP
 
@@ -25,19 +34,6 @@ The project pins dependency versions so local development and CI resolve the sam
 - Private Supabase Storage buckets with short-lived signed URLs
 - Application-level one-user/one-material active-session enforcement, backed by a deferred database unique index migration
 
-## Stack
-
-Next.js + React + TypeScript + Tailwind CSS, PostgreSQL/Supabase, Drizzle ORM, Zod.
-
-## Local setup
-
-1. Select Node.js `22.19.0` (for example with `nvm use`).
-2. Copy `.env.example` to `.env.local`.
-3. Fill `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-4. Install dependencies with `npm install`.
-5. Run `npm run dev`.
-6. Verify with `npm run lint`, `npm run typecheck`, and `npm run build`.
-
 ## Supabase setup
 
 Create two **private** Storage buckets:
@@ -49,9 +45,7 @@ The application generates signed URLs only after authorization checks. Storage p
 
 ## Database migration safety
 
-`drizzle/migrations/0002_material_access_safety.sql` is intentionally marked **manual/deferred**. Do not blindly run it against an existing Supabase project. The repository may be connected to a database with an older schema; inspect/reconcile the live schema first, then apply the compatible migration and RLS/storage policies.
-
-The migration contains the recommended partial unique index preventing two `active`/`paused` material access sessions for the same user/material.
+The material-access safety migration is intentionally marked **manual/deferred**. Do not blindly run it against an existing Supabase project. Inspect and reconcile the live schema first, then apply the compatible migration and RLS/storage policies.
 
 ## Access-control note
 
