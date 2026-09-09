@@ -7,9 +7,13 @@ import { isSupportedPdf } from "@/lib/validation/materials";
 import { randomUUID } from "node:crypto";
 
 export async function GET() {
-  const user = await requireUser();
-  const materials = await db.select().from(personalMaterials).where(eq(personalMaterials.userId, user.id)).orderBy(desc(personalMaterials.createdAt));
-  return Response.json({ materials });
+  try {
+    const user = await requireUser();
+    const materials = await db.select().from(personalMaterials).where(eq(personalMaterials.userId, user.id)).orderBy(desc(personalMaterials.createdAt));
+    return Response.json({ materials });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load personal materials" }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -28,8 +32,8 @@ export async function POST(request: Request) {
     const { error } = await supabase.storage.from("personal-materials").upload(storageKey, file, { contentType: "application/pdf", upsert: false });
     if (error) return Response.json({ error: error.message }, { status: 500 });
     try {
-      const [material] = await db.insert(personalMaterials).values({ userId: user.id, title, description, storageKey, originalFileName: file.name.slice(0, 255), mimeType: file.type, fileSizeBytes: file.size }).returning();
-      return Response.json({ success: true, material });
+      const [material] = await db.insert(personalMaterials).values({ userId: user.id, title, description, storageKey, originalFileName: file.name.slice(0, 255), mimeType: "application/pdf", fileSizeBytes: file.size }).returning();
+      return material ? Response.json({ success: true, material }) : Response.json({ error: "Unable to create material" }, { status: 500 });
     } catch (databaseError) {
       await supabase.storage.from("personal-materials").remove([storageKey]).catch((cleanupError) => console.error("Personal upload cleanup failed:", cleanupError));
       throw databaseError;
