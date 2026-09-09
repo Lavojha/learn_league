@@ -10,28 +10,16 @@ export async function POST(request: Request) {
     const user = await requireUser();
     const body = joinGroupSchema.parse(await request.json());
     let group;
-    if (body.inviteCode) {
-      [group] = await db.select().from(groups).where(eq(groups.inviteCode, normalizeInviteCode(body.inviteCode))).limit(1);
-    } else {
-      [group] = await db.select().from(groups).where(eq(groups.id, body.groupId!)).limit(1);
-    }
+    if (body.inviteCode) [group] = await db.select().from(groups).where(eq(groups.inviteCode, normalizeInviteCode(body.inviteCode))).limit(1);
+    else [group] = await db.select().from(groups).where(eq(groups.id, body.groupId!)).limit(1);
     if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
 
     const [existing] = await db.select().from(groupMembers).where(and(eq(groupMembers.groupId, group.id), eq(groupMembers.userId, user.id))).limit(1);
     if (existing?.status === "active") return Response.json({ success: true, status: "already_member" });
 
-    if (body.inviteCode) {
-      if (!group.inviteCode) return Response.json({ error: "This group does not have an invite code" }, { status: 403 });
-      if (existing?.status === "removed") {
-        const [restored] = await db.update(groupMembers).set({ status: "active", role: "member", joinedAt: new Date(), updatedAt: new Date() }).where(and(eq(groupMembers.id, existing.id), eq(groupMembers.status, "removed"))).returning({ id: groupMembers.id });
-        return restored ? Response.json({ success: true, status: "joined" }) : Response.json({ error: "Membership changed; please retry" }, { status: 409 });
-      }
-      const [member] = await db.insert(groupMembers).values({ groupId: group.id, userId: user.id, role: "member" }).onConflictDoNothing().returning();
-      return Response.json({ success: true, status: member ? "joined" : "already_member" });
-    }
-
-    if (group.type === "public") {
-      if (group.visibility !== "discoverable") return Response.json({ error: "Public groups must be discoverable" }, { status: 403 });
+    if (body.inviteCode || group.type === "public") {
+      if (body.inviteCode && !group.inviteCode) return Response.json({ error: "This group does not have an invite code" }, { status: 403 });
+      if (!body.inviteCode && group.visibility !== "discoverable") return Response.json({ error: "Public groups must be discoverable" }, { status: 403 });
       if (existing?.status === "removed") {
         const [restored] = await db.update(groupMembers).set({ status: "active", role: "member", joinedAt: new Date(), updatedAt: new Date() }).where(and(eq(groupMembers.id, existing.id), eq(groupMembers.status, "removed"))).returning({ id: groupMembers.id });
         return restored ? Response.json({ success: true, status: "joined" }) : Response.json({ error: "Membership changed; please retry" }, { status: 409 });
@@ -44,9 +32,7 @@ export async function POST(request: Request) {
     const [pending] = await db.select().from(groupJoinRequests).where(and(eq(groupJoinRequests.groupId, group.id), eq(groupJoinRequests.userId, user.id), eq(groupJoinRequests.status, "pending"))).limit(1);
     if (pending) return Response.json({ success: true, status: "request_pending" });
     const [requestRow] = await db.insert(groupJoinRequests).values({ groupId: group.id, userId: user.id, status: "pending" }).onConflictDoNothing().returning();
-    return requestRow
-      ? Response.json({ success: true, status: "request_pending", request: requestRow })
-      : Response.json({ success: true, status: "request_pending" });
+    return requestRow ? Response.json({ success: true, status: "request_pending", request: requestRow }) : Response.json({ success: true, status: "request_pending" });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Invalid request" }, { status: 400 });
   }
