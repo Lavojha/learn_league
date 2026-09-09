@@ -13,7 +13,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ gro
     const user = await requireUser();
     const groupId = groupIdSchema.parse((await params).groupId);
     const body = await request.json();
-
     if (body.action) {
       const parsed = respondInvitationSchema.parse(body);
       const [group] = await db.select({ status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
@@ -32,11 +31,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ gro
         }
         const [existing] = await tx.select().from(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, user.id))).limit(1);
         let member;
-        if (existing?.status === "removed") {
-          [member] = await tx.update(groupMembers).set({ status: "active", role: "member", joinedAt: now, updatedAt: now }).where(and(eq(groupMembers.id, existing.id), eq(groupMembers.status, "removed"))).returning();
-        } else {
-          member = existing ?? (await tx.insert(groupMembers).values({ groupId, userId: user.id, role: "member" }).onConflictDoNothing().returning())[0];
-        }
+        if (existing?.status === "removed") [member] = await tx.update(groupMembers).set({ status: "active", role: "member", joinedAt: now, updatedAt: now }).where(and(eq(groupMembers.id, existing.id), eq(groupMembers.status, "removed"))).returning();
+        else member = existing ?? (await tx.insert(groupMembers).values({ groupId, userId: user.id, role: "member" }).onConflictDoNothing().returning())[0];
         if (!member) throw new Error("Unable to join group");
         const [updated] = await tx.update(groupInvitations).set({ status: "accepted", respondedAt: now }).where(and(eq(groupInvitations.id, invitation.id), eq(groupInvitations.status, "pending"))).returning();
         if (!updated) throw new Error("Invitation was already handled");
