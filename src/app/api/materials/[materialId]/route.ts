@@ -7,13 +7,18 @@ import { materialIdSchema, updateMaterialSchema } from "@/lib/validation/materia
 import { normalizeTags } from "@/lib/utils/strings";
 
 export async function GET(_: Request, { params }: { params: Promise<{ materialId: string }> }) {
-  const user = await requireUser();
-  const { materialId } = await params;
-  materialIdSchema.parse(materialId);
-  if (!(await canViewMaterial(user.id, materialId))) return Response.json({ error: "Material not found or inaccessible" }, { status: 404 });
-  const [material] = await db.select().from(materials).where(eq(materials.id, materialId)).limit(1);
-  const tags = await db.select({ tag: materialTags.tag }).from(materialTags).where(eq(materialTags.materialId, materialId));
-  return Response.json({ material, tags: tags.map((row) => row.tag) });
+  try {
+    const user = await requireUser();
+    const { materialId } = await params;
+    materialIdSchema.parse(materialId);
+    if (!(await canViewMaterial(user.id, materialId))) return Response.json({ error: "Material not found or inaccessible" }, { status: 404 });
+    const [material] = await db.select().from(materials).where(eq(materials.id, materialId)).limit(1);
+    if (!material) return Response.json({ error: "Material not found" }, { status: 404 });
+    const tags = await db.select({ tag: materialTags.tag }).from(materialTags).where(eq(materialTags.materialId, materialId));
+    return Response.json({ material, tags: tags.map((row) => row.tag) });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load material" }, { status: 400 });
+  }
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ materialId: string }> }) {
@@ -27,7 +32,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
     const material = await db.transaction(async (tx) => {
       const [current] = await tx.select().from(materials).where(and(eq(materials.id, materialId), eq(materials.status, "published"))).limit(1);
       if (!current) throw new Error("Material not found");
-
       const merged = {
         title: input.title ?? current.title,
         description: input.description !== undefined ? input.description : current.description,
@@ -44,24 +48,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
         downloadAvailableUntil: input.downloadAvailableUntil !== undefined ? input.downloadAvailableUntil : current.downloadAvailableUntil,
       };
       updateMaterialSchema.parse(merged);
-
-      const [updated] = await tx.update(materials).set({
-        title: merged.title,
-        description: merged.description,
-        availabilityMode: merged.availabilityMode,
-        availableFrom: merged.availableFrom,
-        availableUntil: merged.availableUntil,
-        accessDurationMinutes: merged.accessDurationMinutes,
-        allowPause: merged.allowPause,
-        downloadEnabled: merged.downloadEnabled,
-        downloadStartMode: merged.downloadStartMode,
-        downloadAvailableFrom: merged.downloadAvailableFrom,
-        downloadAvailableUntil: merged.downloadAvailableUntil,
-        expiryAction: merged.expiryAction,
-        updatedAt: new Date(),
-      }).where(and(eq(materials.id, materialId), eq(materials.status, "published"))).returning();
+      const [updated] = await tx.update(materials).set({ title: merged.title, description: merged.description, availabilityMode: merged.availabilityMode, availableFrom: merged.availableFrom, availableUntil: merged.availableUntil, accessDurationMinutes: merged.accessDurationMinutes, allowPause: merged.allowPause, downloadEnabled: merged.downloadEnabled, downloadStartMode: merged.downloadStartMode, downloadAvailableFrom: merged.downloadAvailableFrom, downloadAvailableUntil: merged.downloadAvailableUntil, expiryAction: merged.expiryAction, updatedAt: new Date() }).where(and(eq(materials.id, materialId), eq(materials.status, "published"))).returning();
       if (!updated) throw new Error("Material changed; please refresh and try again");
-
       if (input.tags !== undefined) {
         await tx.delete(materialTags).where(eq(materialTags.materialId, materialId));
         const tags = normalizeTags(input.tags);
@@ -76,10 +64,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ materialId: string }> }) {
-  const user = await requireUser();
-  const { materialId } = await params;
-  materialIdSchema.parse(materialId);
-  if (!(await canManageMaterial(user.id, materialId))) return Response.json({ error: "Permission denied" }, { status: 403 });
-  const [material] = await db.update(materials).set({ status: "archived", updatedAt: new Date() }).where(and(eq(materials.id, materialId), eq(materials.status, "published"))).returning();
-  return material ? Response.json({ success: true }) : Response.json({ error: "Material not found" }, { status: 404 });
+  try {
+    const user = await requireUser();
+    const { materialId } = await params;
+    materialIdSchema.parse(materialId);
+    if (!(await canManageMaterial(user.id, materialId))) return Response.json({ error: "Permission denied" }, { status: 403 });
+    const [material] = await db.update(materials).set({ status: "archived", updatedAt: new Date() }).where(and(eq(materials.id, materialId), eq(materials.status, "published"))).returning();
+    return material ? Response.json({ success: true }) : Response.json({ error: "Material not found" }, { status: 404 });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to archive material" }, { status: 400 });
+  }
 }
