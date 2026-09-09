@@ -1,18 +1,28 @@
 import { createClient } from "@/lib/supabase/server";
 
-const MATERIAL_BUCKET = "materials";
-const PERSONAL_MATERIAL_BUCKET = "personal-materials";
+export const STORAGE_BUCKETS = {
+  groupMaterials: "materials",
+  personalMaterials: "personal-materials",
+} as const;
 
 export function getMaterialBucket(personal = false) {
-  return personal ? PERSONAL_MATERIAL_BUCKET : MATERIAL_BUCKET;
+  return personal ? STORAGE_BUCKETS.personalMaterials : STORAGE_BUCKETS.groupMaterials;
 }
 
-export async function createSignedFileUrl(storageKey: string, personal = false, expiresInSeconds = 300) {
+export async function createSignedFileUrl(
+  storageKey: string,
+  personal = false,
+  expiresInSeconds = 300,
+) {
   const supabase = await createClient();
   const bucket = getMaterialBucket(personal);
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(storageKey, expiresInSeconds);
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(storageKey, expiresInSeconds);
 
-  if (error) throw new Error(error.message);
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message ?? "Unable to create signed file URL");
+  }
   return data.signedUrl;
 }
 
