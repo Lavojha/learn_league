@@ -10,8 +10,7 @@ const materialIdSchema = z.string().uuid();
 export async function GET(_: Request, { params }: { params: Promise<{ materialId: string }> }) {
   try {
     const user = await requireUser();
-    const { materialId: rawMaterialId } = await params;
-    const materialId = materialIdSchema.parse(rawMaterialId);
+    const materialId = materialIdSchema.parse((await params).materialId);
     const [material] = await db.select().from(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id))).limit(1);
     if (!material) return Response.json({ error: "Material not found" }, { status: 404 });
     const signedUrl = await createSignedFileUrl(material.storageKey, true, 300);
@@ -24,11 +23,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ materialId
 export async function DELETE(_: Request, { params }: { params: Promise<{ materialId: string }> }) {
   try {
     const user = await requireUser();
-    const { materialId: rawMaterialId } = await params;
-    const materialId = materialIdSchema.parse(rawMaterialId);
+    const materialId = materialIdSchema.parse((await params).materialId);
     const [material] = await db.select().from(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id))).limit(1);
     if (!material) return Response.json({ error: "Material not found" }, { status: 404 });
-    await db.delete(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id)));
+    const [deleted] = await db.delete(personalMaterials).where(and(eq(personalMaterials.id, materialId), eq(personalMaterials.userId, user.id))).returning({ id: personalMaterials.id });
+    if (!deleted) return Response.json({ error: "Material changed; please refresh" }, { status: 409 });
     try {
       await removeStoredFile(material.storageKey, true);
     } catch (storageError) {
