@@ -11,20 +11,25 @@ import { z } from "zod";
 const groupIdSchema = z.string().uuid();
 
 export async function GET(request: Request) {
-  const user = await requireUser();
-  const rawGroupId = new URL(request.url).searchParams.get("groupId");
-  if (!rawGroupId) return Response.json({ error: "groupId is required" }, { status: 400 });
-  const groupId = groupIdSchema.safeParse(rawGroupId);
-  if (!groupId.success) return Response.json({ error: "Invalid groupId" }, { status: 400 });
-  const [group] = await db.select({ type: groups.type, visibility: groups.visibility, status: groups.status }).from(groups).where(eq(groups.id, groupId.data)).limit(1);
-  if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
-  const isMember = (await getGroupMembership(user.id, groupId.data)) !== null;
-  const isPublicGroup = group.type === "public" && group.visibility === "discoverable";
-  if (!isPublicGroup && !isMember) return Response.json({ error: "Not a group member" }, { status: 403 });
-  const conditions = [eq(materials.groupId, groupId.data), eq(materials.status, "published")];
-  if (!isMember) conditions.push(eq(materials.visibility, "public"));
-  const rows = await db.select().from(materials).where(and(...conditions));
-  return Response.json({ materials: rows });
+  try {
+    const user = await requireUser();
+    const rawGroupId = new URL(request.url).searchParams.get("groupId");
+    if (!rawGroupId) return Response.json({ error: "groupId is required" }, { status: 400 });
+    const parsedGroupId = groupIdSchema.safeParse(rawGroupId);
+    if (!parsedGroupId.success) return Response.json({ error: "Invalid groupId" }, { status: 400 });
+    const groupId = parsedGroupId.data;
+    const [group] = await db.select({ type: groups.type, visibility: groups.visibility, status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
+    if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
+    const isMember = (await getGroupMembership(user.id, groupId)) !== null;
+    const isPublicGroup = group.type === "public" && group.visibility === "discoverable";
+    if (!isPublicGroup && !isMember) return Response.json({ error: "Not a group member" }, { status: 403 });
+    const conditions = [eq(materials.groupId, groupId), eq(materials.status, "published")];
+    if (!isMember) conditions.push(eq(materials.visibility, "public"));
+    const rows = await db.select().from(materials).where(and(...conditions));
+    return Response.json({ materials: rows });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load materials" }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
