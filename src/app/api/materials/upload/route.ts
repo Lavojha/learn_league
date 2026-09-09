@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.storage.from("materials").upload(storageKey, file, { contentType: "application/pdf", upsert: false });
     if (error) return Response.json({ error: error.message }, { status: 500 });
-    return Response.json({ success: true, storageKey, originalFileName: file.name, mimeType: file.type, fileSizeBytes: file.size });
+    return Response.json({ success: true, storageKey, originalFileName: file.name.slice(0, 255), mimeType: "application/pdf", fileSizeBytes: file.size });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Upload failed" }, { status: 400 });
   }
