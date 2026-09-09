@@ -23,7 +23,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
     const body = await request.json();
     const title = body.title === undefined ? undefined : String(body.title).trim();
     const description = body.description === undefined ? undefined : String(body.description ?? "").trim() || null;
-    if (title !== undefined && !title) return Response.json({ error: "Title cannot be empty" }, { status: 400 });
+    if (title !== undefined && (!title || title.length > 200)) return Response.json({ error: "Title must be between 1 and 200 characters" }, { status: 400 });
+    if (description !== undefined && description !== null && description.length > 5000) return Response.json({ error: "Description must be 5000 characters or fewer" }, { status: 400 });
 
     const [material] = await db.update(personalMaterials).set({
       ...(title !== undefined ? { title } : {}),
