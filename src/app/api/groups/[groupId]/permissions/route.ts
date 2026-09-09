@@ -1,11 +1,139 @@
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { groupMembers, groupPermissions, groups } from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { getDefaultRolePermissions, hasGroupPermission } from "@/lib/groups/permissions";
 import { isGroupRole } from "@/lib/groups/roles";
-import { z } from "zod";
 
-const groupIdSchema=z.string().uuid(); const permissionKeys=["manageMembers","manageMaterials","manageGroupInfo","manageInvitations","manageJoinRequests","manageContent"] as const; type PermissionValues=Record<(typeof permissionKeys)[number],boolean>;
-export async function GET(_:Request,{params}:{params:Promise<{groupId:string}>}){try{const user=await requireUser();const groupId=groupIdSchema.parse((await params).groupId);const [group]=await db.select({status:groups.status}).from(groups).where(eq(groups.id,groupId)).limit(1);if(!group||group.status!=="active")return Response.json({error:"Group not found"},{status:404});if(!(await hasGroupPermission(user.id,groupId,"manageMembers")))return Response.json({error:"Permission denied"},{status:403});const rows=await db.select({id:groupPermissions.id,groupId:groupPermissions.groupId,role:groupPermissions.role,manageMembers:groupPermissions.manageMembers,manageMaterials:groupPermissions.manageMaterials,manageGroupInfo:groupPermissions.manageGroupInfo,manageInvitations:groupPermissions.manageInvitations,manageJoinRequests:groupPermissions.manageJoinRequests,manageContent:groupPermissions.manageContent,updatedAt:groupPermissions.updatedAt}).from(groupPermissions).where(eq(groupPermissions.groupId,groupId));return Response.json({permissions:rows});}catch(error){return Response.json({error:error instanceof Error?error.message:"Unable to load permissions"},{status:400});}}
-export async function PATCH(request:Request,{params}:{params:Promise<{groupId:string}>}){try{const user=await requireUser();const groupId=groupIdSchema.parse((await params).groupId);const [actor]=await db.select({id:groupMembers.id,role:groupMembers.role}).from(groupMembers).where(and(eq(groupMembers.groupId,groupId),eq(groupMembers.userId,user.id),eq(groupMembers.status,"active"))).limit(1);const [group]=await db.select({status:groups.status}).from(groups).where(eq(groups.id,groupId)).limit(1);if(!group||group.status!=="active")return Response.json({error:"Group not found"},{status:404});if(!actor||actor.role!=="owner")return Response.json({error:"Only the owner can edit role permissions"},{status:403});const body=await request.json();const role=String(body.role??"");if(!isGroupRole(role))return Response.json({error:"Invalid role"},{status:400});if(!body.permissions||typeof body.permissions!=="object"||Array.isArray(body.permissions))return Response.json({error:"permissions must be an object"},{status:400});const defaults=getDefaultRolePermissions(role) as PermissionValues;const values:PermissionValues={...defaults};for(const key of permissionKeys){if(key in body.permissions){if(typeof body.permissions[key]!=="boolean")return Response.json({error:`${key} must be boolean`},{status:400});values[key]=body.permissions[key] as boolean;}}const [row]=await db.insert(groupPermissions).values({groupId,role,...values}).onConflictDoUpdate({target:[groupPermissions.groupId,groupPermissions.role],set:{...values,updatedAt:new Date()}}).returning({id:groupPermissions.id,groupId:groupPermissions.groupId,role:groupPermissions.role,manageMembers:groupPermissions.manageMembers,manageMaterials:groupPermissions.manageMaterials,manageGroupInfo:groupPermissions.manageGroupInfo,manageInvitations:groupPermissions.manageInvitations,manageJoinRequests:groupPermissions.manageJoinRequests,manageContent:groupPermissions.manageContent,updatedAt:groupPermissions.updatedAt});return row?Response.json({success:true,permissions:row}):Response.json({error:"Unable to save permissions"},{status:409});}catch(error){return Response.json({error:error instanceof Error?error.message:"Invalid request"},{status:400});}}
+const groupIdSchema = z.string().uuid();
+const permissionKeys = [
+  "manageMembers",
+  "manageMaterials",
+  "manageGroupInfo",
+  "manageInvitations",
+  "manageJoinRequests",
+  "manageContent",
+] as const;
+type PermissionValues = Record<(typeof permissionKeys)[number], boolean>;
+
+function permissionResponse(row: typeof groupPermissions.$inferSelect) {
+  return {
+    id: row.id,
+    groupId: row.groupId,
+    role: row.role,
+    manageMembers: row.manageMembers,
+    manageMaterials: row.manageMaterials,
+    manageGroupInfo: row.manageGroupInfo,
+    manageInvitations: row.manageInvitations,
+    manageJoinRequests: row.manageJoinRequests,
+    manageContent: row.manageContent,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export async function GET(_: Request, { params }: { params: Promise<{ groupId: string }> }) {
+  try {
+    const user = await requireUser();
+    const groupId = groupIdSchema.parse((await params).groupId);
+    const [group] = await db
+      .select({ status: groups.status })
+      .from(groups)
+      .where(eq(groups.id, groupId))
+      .limit(1);
+
+    if (!group || group.status !== "active") {
+      return Response.json({ error: "Group not found" }, { status: 404 });
+    }
+    if (!(await hasGroupPermission(user.id, groupId, "manageMembers"))) {
+      return Response.json({ error: "Permission denied" }, { status: 403 });
+    }
+
+    const rows = await db
+      .select()
+      .from(groupPermissions)
+      .where(eq(groupPermissions.groupId, groupId));
+
+    return Response.json({ permissions: rows.map(permissionResponse) });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Unable to load permissions" },
+      { status: 400 },
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ groupId: string }> },
+) {
+  try {
+    const user = await requireUser();
+    const groupId = groupIdSchema.parse((await params).groupId);
+    const [actor] = await db
+      .select({ id: groupMembers.id, role: groupMembers.role })
+      .from(groupMembers)
+      .where(
+        and(
+          eq(groupMembers.groupId, groupId),
+          eq(groupMembers.userId, user.id),
+          eq(groupMembers.status, "active"),
+        ),
+      )
+      .limit(1);
+    const [group] = await db
+      .select({ status: groups.status })
+      .from(groups)
+      .where(eq(groups.id, groupId))
+      .limit(1);
+
+    if (!group || group.status !== "active") {
+      return Response.json({ error: "Group not found" }, { status: 404 });
+    }
+    if (!actor || actor.role !== "owner") {
+      return Response.json({ error: "Only the owner can edit role permissions" }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const role = String(body.role ?? "");
+    if (!isGroupRole(role)) {
+      return Response.json({ error: "Invalid role" }, { status: 400 });
+    }
+    if (
+      !body.permissions ||
+      typeof body.permissions !== "object" ||
+      Array.isArray(body.permissions)
+    ) {
+      return Response.json({ error: "permissions must be an object" }, { status: 400 });
+    }
+
+    const defaults = getDefaultRolePermissions(role) as PermissionValues;
+    const values: PermissionValues = { ...defaults };
+    for (const key of permissionKeys) {
+      if (key in body.permissions) {
+        if (typeof body.permissions[key] !== "boolean") {
+          return Response.json({ error: `${key} must be boolean` }, { status: 400 });
+        }
+        values[key] = body.permissions[key] as boolean;
+      }
+    }
+
+    const [row] = await db
+      .insert(groupPermissions)
+      .values({ groupId, role, ...values })
+      .onConflictDoUpdate({
+        target: [groupPermissions.groupId, groupPermissions.role],
+        set: { ...values, updatedAt: new Date() },
+      })
+      .returning();
+
+    return row
+      ? Response.json({ success: true, permissions: permissionResponse(row) })
+      : Response.json({ error: "Unable to save permissions" }, { status: 409 });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Invalid request" },
+      { status: 400 },
+    );
+  }
+}
