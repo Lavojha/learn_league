@@ -25,9 +25,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ gro
       if (!group || group.status !== "active" || group.ownerId !== user.id) throw new Error("Group ownership changed; please refresh and try again");
       const [currentTarget] = await tx.select({ id: groupMembers.id, role: groupMembers.role, status: groupMembers.status }).from(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, newOwnerId))).limit(1);
       if (!currentTarget || currentTarget.status !== "active" || (currentTarget.role !== "co_owner" && currentTarget.role !== "admin")) throw new Error("Target is no longer eligible for ownership");
-      await tx.update(groups).set({ ownerId: newOwnerId, updatedAt: now }).where(and(eq(groups.id, groupId), eq(groups.ownerId, user.id)));
-      await tx.update(groupMembers).set({ role: "co_owner", updatedAt: now }).where(and(eq(groupMembers.id, actor.id), eq(groupMembers.role, "owner")));
-      await tx.update(groupMembers).set({ role: "owner", updatedAt: now }).where(and(eq(groupMembers.id, currentTarget.id), eq(groupMembers.role, currentTarget.role)));
+      const [updatedGroup] = await tx.update(groups).set({ ownerId: newOwnerId, updatedAt: now }).where(and(eq(groups.id, groupId), eq(groups.ownerId, user.id))).returning({ id: groups.id });
+      if (!updatedGroup) throw new Error("Group ownership changed; please refresh and try again");
+      const [demoted] = await tx.update(groupMembers).set({ role: "co_owner", updatedAt: now }).where(and(eq(groupMembers.id, actor.id), eq(groupMembers.role, "owner"))).returning({ id: groupMembers.id });
+      if (!demoted) throw new Error("Current owner membership changed; please refresh and try again");
+      const [promoted] = await tx.update(groupMembers).set({ role: "owner", updatedAt: now }).where(and(eq(groupMembers.id, currentTarget.id), eq(groupMembers.role, currentTarget.role))).returning({ id: groupMembers.id });
+      if (!promoted) throw new Error("Target membership changed; please refresh and try again");
     });
 
     return Response.json({ success: true, ownerId: newOwnerId });
