@@ -6,6 +6,8 @@ import { getDefaultRolePermissions } from "@/lib/groups/permissions";
 import { createGroupSchema } from "@/lib/validation/groups";
 import { createId } from "@/lib/utils/ids";
 
+const ROLE_LIST = ["owner", "co_owner", "admin", "member"] as const;
+
 export async function GET() {
   try {
     const user = await requireUser();
@@ -18,8 +20,7 @@ export async function GET() {
     const rows = await db.select().from(groups).where(inArray(groups.id, ids));
     return Response.json({ groups: rows.filter((group) => group.status === "active") });
   } catch (error) {
-    console.error(error);
-    return Response.json({ error: "Unable to load groups" }, { status: 500 });
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load groups" }, { status: 500 });
   }
 }
 
@@ -34,12 +35,11 @@ export async function POST(request: Request) {
       const [created] = await tx.insert(groups).values({ id: groupId, name: input.name, description: input.description ?? null, type: input.type, visibility: input.visibility, ownerId: user.id, inviteCode }).returning();
       if (!created) throw new Error("Unable to create group");
       await tx.insert(groupMembers).values({ groupId, userId: user.id, role: "owner", status: "active" });
-      await tx.insert(groupPermissions).values(["owner", "co_owner", "admin", "member"].map((role) => ({ groupId, role: role as "owner" | "co_owner" | "admin" | "member", ...getDefaultRolePermissions(role as "owner" | "co_owner" | "admin" | "member") })));
+      await tx.insert(groupPermissions).values(ROLE_LIST.map((role) => ({ groupId, role, ...getDefaultRolePermissions(role) })));
       return created;
     });
     return Response.json({ group }, { status: 201 });
   } catch (error) {
-    console.error(error);
     return Response.json({ error: error instanceof Error ? error.message : "Unable to create group" }, { status: 400 });
   }
 }
