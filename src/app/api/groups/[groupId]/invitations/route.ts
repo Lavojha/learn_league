@@ -70,6 +70,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ groupId: s
   try {
     const user = await requireUser();
     const groupId = groupIdSchema.parse((await params).groupId);
+    const [group] = await db.select({ status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
+    if (!group || group.status !== "active") return Response.json({ error: "Group not found" }, { status: 404 });
     const invitations = await db.select().from(groupInvitations).where(and(eq(groupInvitations.groupId, groupId), eq(groupInvitations.invitedUserId, user.id), eq(groupInvitations.status, "pending")));
     return Response.json({ invitations });
   } catch (error) {
