@@ -23,7 +23,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ gro
         const [updated] = await db.update(groupInvitations).set({ status: "declined", respondedAt: now }).where(and(eq(groupInvitations.id, parsed.invitationId), eq(groupInvitations.invitedUserId, user.id), eq(groupInvitations.groupId, groupId), eq(groupInvitations.status, "pending"))).returning();
         return updated ? Response.json({ success: true, invitation: updated }) : Response.json({ error: "Invitation not found or no longer pending" }, { status: 409 });
       }
-
       const result = await db.transaction(async (tx) => {
         const [invitation] = await tx.select().from(groupInvitations).where(and(eq(groupInvitations.id, parsed.invitationId), eq(groupInvitations.invitedUserId, user.id), eq(groupInvitations.groupId, groupId), eq(groupInvitations.status, "pending"))).limit(1);
         if (!invitation) throw new Error("Invitation not found or no longer pending");
@@ -34,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ gro
         const [existing] = await tx.select().from(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, user.id))).limit(1);
         let member;
         if (existing?.status === "removed") {
-          [member] = await tx.update(groupMembers).set({ status: "active", role: "member", joinedAt: now, updatedAt: now }).where(eq(groupMembers.id, existing.id)).returning();
+          [member] = await tx.update(groupMembers).set({ status: "active", role: "member", joinedAt: now, updatedAt: now }).where(and(eq(groupMembers.id, existing.id), eq(groupMembers.status, "removed"))).returning();
         } else {
           member = existing ?? (await tx.insert(groupMembers).values({ groupId, userId: user.id, role: "member" }).onConflictDoNothing().returning())[0];
         }
@@ -55,10 +54,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ gro
     if (existingMember?.status === "active") return Response.json({ error: "User is already a group member" }, { status: 409 });
     const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
     if (expiresAt && (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())) return Response.json({ error: "expiresAt must be a future date" }, { status: 400 });
-    const [pending] = await db.select({ id: groupInvitations.id }).from(groupInvitations).where(and(eq(groupInvitations.groupId, groupId), eq(groupInvitations.invitedUserId, invitedUserId), eq(groupInvitations.status, "pending"))).limit(1);
-    if (pending) return Response.json({ error: "A pending invitation already exists" }, { status: 409 });
-    const [invitation] = await db.insert(groupInvitations).values({ groupId, invitedUserId, invitedBy: user.id, expiresAt }).returning();
-    return Response.json({ success: true, invitation });
+    const [invitation] = await db.insert(groupInvitations).values({ groupId, invitedUserId, invitedBy: user.id, expiresAt }).onConflictDoNothing().returning();
+    return invitation ? Response.json({ success: true, invitation }) : Response.json({ error: "A pending invitation already exists" }, { status: 409 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid request";
     const status = message === "Invitation has expired" ? 410 : message.includes("not found or no longer pending") || message === "Invitation was already handled" ? 409 : 400;
