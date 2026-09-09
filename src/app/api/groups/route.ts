@@ -11,14 +11,11 @@ const ROLE_LIST = ["owner", "co_owner", "admin", "member"] as const;
 export async function GET() {
   try {
     const user = await requireUser();
-    const memberships = await db
-      .select({ groupId: groupMembers.groupId })
-      .from(groupMembers)
-      .where(and(eq(groupMembers.userId, user.id), eq(groupMembers.status, "active")));
+    const memberships = await db.select({ groupId: groupMembers.groupId }).from(groupMembers).where(and(eq(groupMembers.userId, user.id), eq(groupMembers.status, "active")));
     const ids = memberships.map((m) => m.groupId);
     if (ids.length === 0) return Response.json({ groups: [] });
-    const rows = await db.select().from(groups).where(inArray(groups.id, ids));
-    return Response.json({ groups: rows.filter((group) => group.status === "active") });
+    const rows = await db.select().from(groups).where(and(inArray(groups.id, ids), eq(groups.status, "active")));
+    return Response.json({ groups: rows });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to load groups" }, { status: 500 });
   }
