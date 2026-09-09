@@ -15,7 +15,8 @@ export async function GET() {
 
     return Response.json({ groups: rows });
   } catch (error) {
-    console.error(error);
-    return Response.json({ error: "Unable to discover groups" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Unable to discover groups";
+    const status = message.toLowerCase().includes("redirect") || message.toLowerCase().includes("unauthorized") ? 401 : 500;
+    return Response.json({ error: status === 401 ? "Authentication required" : "Unable to discover groups" }, { status });
   }
 }
