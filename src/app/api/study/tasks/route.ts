@@ -8,9 +8,13 @@ import { z } from "zod";
 const taskIdSchema = z.string().uuid();
 
 export async function GET() {
-  const user = await requireUser();
-  const tasks = await db.select().from(personalTasks).where(eq(personalTasks.userId, user.id)).orderBy(desc(personalTasks.createdAt));
-  return Response.json({ tasks });
+  try {
+    const user = await requireUser();
+    const tasks = await db.select().from(personalTasks).where(eq(personalTasks.userId, user.id)).orderBy(desc(personalTasks.createdAt));
+    return Response.json({ tasks });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load tasks" }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
