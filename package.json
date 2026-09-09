@@ -17,6 +17,7 @@
     "postgres": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "tailwindcss": "latest",
     "zod": "latest"
   },
   "devDependencies": {
